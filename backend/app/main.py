@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.summarizer import summarize_text, generate_text
+from app.summarizer import summarize_text, generate_text, analyze_image
 
 app = FastAPI(title="AI Summarizer API")
 
@@ -85,6 +85,25 @@ async def generate(
         raise HTTPException(status_code=400, detail="Only .txt and .pdf supported")
 
     return {"generated_text": generate_text(extracted_text)}
+
+@app.post("/analyze-image")
+async def analyze_image_endpoint(
+    file: UploadFile = File(...)
+):
+    if not file:
+        raise HTTPException(status_code=400, detail="No image file provided.")
+
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image file uploads are supported.")
+
+    try:
+        content = await file.read()
+        description = analyze_image(content, file.content_type)
+        return {"description": description}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze image: {str(e)}")
 
 # Serve the static UI files from the "static" directory
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

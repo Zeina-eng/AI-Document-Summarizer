@@ -1,9 +1,11 @@
 import requests
 import os
+import base64
 from fastapi import HTTPException
 
 SUMMARIZE_API_URL = "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn"
 GENERATE_API_URL = "https://router.huggingface.co/v1/chat/completions"
+ANALYZE_IMAGE_API_URL = "https://router.huggingface.co/v1/chat/completions"
 
 
 def call_hf_api(api_url, text, payload_extra=None):
@@ -93,3 +95,65 @@ def summarize_text(text):
 
 def generate_text(prompt):
     return call_hf_api(GENERATE_API_URL, prompt)
+
+def analyze_image(image_bytes, mime_type):
+    hf_api_key = os.getenv("HF_API_KEY")
+    if not hf_api_key:
+        raise HTTPException(status_code=500, detail="Server error: HF_API_KEY environment variable is missing")
+
+    headers = {
+        "Authorization": f"Bearer {hf_api_key}",
+        "Content-Type": "application/json"
+    }
+
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+    payload = {
+        "model": "Qwen/Qwen2.5-VL-72B-Instruct",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image in detail and extract any relevant information from it."},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_image}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 500,
+        "temperature": 0.2
+    }
+
+    try:
+        response = requests.post(
+            ANALYZE_IMAGE_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
+
+        if response.status_code != 200:
+            try:
+                error_data = response.json()
+                if isinstance(error_data, dict):
+                    error_msg = error_data.get("error", "Unknown error")
+                else:
+                    error_msg = str(error_data)
+            except Exception:
+                error_msg = response.text or "Unknown error"
+            raise HTTPException(status_code=response.status_code, detail=f"Hugging Face API Error: {error_msg}")
+
+        data = response.json()
+        if isinstance(data, dict) and "choices" in data and len(data["choices"]) > 0:
+            return data["choices"][0]["message"]["content"]
+
+        raise HTTPException(status_code=502, detail="Unexpected response from vision model")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Hugging Face API connection error: {str(e)}")

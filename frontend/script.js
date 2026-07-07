@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabs = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     const actionBtns = document.querySelectorAll('.action-btn');
+    const actionSelector = document.getElementById('action-selector');
     const subBtn = document.getElementById('summarize-btn');
     const loadingOverlay = document.getElementById('loading-overlay');
     const resultContainer = document.getElementById('result-container');
@@ -22,9 +23,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const dropZone = document.getElementById('drop-zone');
     const fileNameDisplay = document.getElementById('file-name');
 
-    let currentTab = 'text'; // 'text' | 'file'
+    // Image Inputs
+    const imageInput = document.getElementById('image-input');
+    const imageDropZone = document.getElementById('image-drop-zone');
+    const imageFileNameDisplay = document.getElementById('image-file-name');
+    const imagePreviewContainer = document.getElementById('image-preview-container');
+    const imagePreview = document.getElementById('image-preview');
+
+    let currentTab = 'text'; // 'text' | 'file' | 'image'
     let currentAction = 'summarize'; // 'summarize' | 'generate'
     let selectedFile = null;
+    let selectedImage = null;
 
     // Tabs Logic
     tabs.forEach(tab => {
@@ -35,6 +44,22 @@ document.addEventListener('DOMContentLoaded', () => {
             tab.classList.add('active');
             currentTab = tab.dataset.tab;
             document.getElementById(`${currentTab}-tab`).classList.add('active');
+
+            // Show/Hide action selector depending on tab
+            if (currentTab === 'image') {
+                actionSelector.classList.add('hidden');
+                subBtn.querySelector('span').textContent = 'Analyze Image';
+                resultTitle.textContent = 'Image Description';
+            } else {
+                actionSelector.classList.remove('hidden');
+                if (currentAction === 'generate') {
+                    subBtn.querySelector('span').textContent = 'Generate Text';
+                    resultTitle.textContent = 'Generated Text';
+                } else {
+                    subBtn.querySelector('span').textContent = 'Generate Summary';
+                    resultTitle.textContent = 'Generated Summary';
+                }
+            }
         });
     });
 
@@ -92,6 +117,48 @@ document.addEventListener('DOMContentLoaded', () => {
         fileNameDisplay.textContent = `Selected: ${file.name}`;
     }
 
+    // Image Drop Zone Logic
+    imageDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        imageDropZone.classList.add('dragover');
+    });
+
+    imageDropZone.addEventListener('dragleave', () => {
+        imageDropZone.classList.remove('dragover');
+    });
+
+    imageDropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        imageDropZone.classList.remove('dragover');
+        
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleImageSelect(e.dataTransfer.files[0]);
+        }
+    });
+
+    imageInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+            handleImageSelect(e.target.files[0]);
+        }
+    });
+
+    function handleImageSelect(file) {
+        if (!file.type.startsWith('image/')) {
+            alert("Please select an image file (.png, .jpg, .jpeg, .webp).");
+            return;
+        }
+        selectedImage = file;
+        imageFileNameDisplay.textContent = `Selected: ${file.name}`;
+        
+        // Show image preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            imagePreview.src = e.target.result;
+            imagePreviewContainer.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+
     // Submit Action
     subBtn.addEventListener('click', async () => {
         // Validate
@@ -100,27 +167,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(`Please enter some text to ${currentAction}.`);
                 return;
             }
-        } else {
+        } else if (currentTab === 'file') {
             if (!selectedFile) {
                 alert("Please upload a file.");
+                return;
+            }
+        } else {
+            if (!selectedImage) {
+                alert("Please upload an image.");
                 return;
             }
         }
 
         // Hide old results & show loader
         resultContainer.classList.add('hidden');
-        loadingOverlay.querySelector('p').textContent = currentAction === 'summarize' ? 'Analyzing document...' : 'Generating text...';
+        if (currentTab === 'image') {
+            loadingOverlay.querySelector('p').textContent = 'Analyzing image...';
+        } else {
+            loadingOverlay.querySelector('p').textContent = currentAction === 'summarize' ? 'Analyzing document...' : 'Generating text...';
+        }
         loadingOverlay.classList.remove('hidden');
 
         try {
             const formData = new FormData();
+            let endpoint = '';
+
             if (currentTab === 'text') {
                 formData.append('text', rawTextNode.value.trim());
-            } else {
+                endpoint = currentAction === 'summarize' ? '/summarize' : '/generate';
+            } else if (currentTab === 'file') {
                 formData.append('file', selectedFile);
+                endpoint = currentAction === 'summarize' ? '/summarize' : '/generate';
+            } else {
+                formData.append('file', selectedImage);
+                endpoint = '/analyze-image';
             }
 
-            const endpoint = currentAction === 'summarize' ? '/summarize' : '/generate';
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'POST',
                 body: formData
@@ -129,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (response.ok) {
-                const output = data.summary || data.generated_text;
+                const output = data.summary || data.generated_text || data.description;
                 if (output) {
                     summaryOutput.textContent = output;
                     resultContainer.classList.remove('hidden');
