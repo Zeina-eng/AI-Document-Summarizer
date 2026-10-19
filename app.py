@@ -13,12 +13,14 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / "backend" / ".env")
 
 # On Streamlit Community Cloud, read the key from Streamlit Secrets
+
 try:
-    hf_secret = st.secrets.get("HF_API_KEY", "")
-    if hf_secret:
-        os.environ["HF_API_KEY"] = hf_secret
+    groq_secret = st.secrets.get("GROQ_API_KEY", "")
+    if groq_secret:
+        os.environ["GROQ_API_KEY"] = groq_secret
 except Exception:
     pass
+
 
 # Reuse your existing backend functions
 from backend.app.summarizer import (
@@ -38,7 +40,7 @@ st.set_page_config(
 st.title("📝 AI Text Summarizer")
 st.write(
     "Summarize text, generate text, or analyze images "
-    "using your existing Hugging Face integration."
+    "using your existing Groq integration."
 )
 
 with st.sidebar:
@@ -49,11 +51,11 @@ with st.sidebar:
     )
 
     st.divider()
-    st.caption("Powered by Hugging Face Inference API")
+    st.caption("Powered by Groq API")
 
 
 def get_api_key():
-    return bool(os.getenv("HF_API_KEY"))
+    return bool(os.getenv("GROQ_API_KEY"))
 
 
 if mode in ["Summarize Text", "Generate Text"]:
@@ -97,7 +99,7 @@ if mode in ["Summarize Text", "Generate Text"]:
 
         if not get_api_key():
             st.error(
-                "HF_API_KEY is missing. Add it to backend/.env locally "
+                "GROQ_API_KEY is missing. Add it to backend/.env locally "
                 "or to Streamlit Cloud Secrets after deployment."
             )
             st.stop()
@@ -125,7 +127,7 @@ if mode in ["Summarize Text", "Generate Text"]:
             if exc.status_code in (402, 429):
                 st.info(
                     "Your API provider may require available credits "
-                    "or may have a usage limit. Check your Hugging Face "
+                    "or may have a usage limit. Check your Groq "
                     "account and API provider settings."
                 )
 
@@ -152,7 +154,7 @@ elif mode == "Analyze Image":
         if st.button("Analyze Image", type="primary"):
             if not get_api_key():
                 st.error(
-                    "HF_API_KEY is missing. Add it to backend/.env locally "
+                    "GROQ_API_KEY is missing. Add it to backend/.env locally "
                     "or to Streamlit Cloud Secrets after deployment."
                 )
                 st.stop()
